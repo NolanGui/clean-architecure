@@ -1,0 +1,135 @@
+// Code à analyser
+public class PriceCalculator {
+   
+    // Problème : trop de logique métier dans une seule méthode
+    // Amélioration : séparer les règles de calcul (client, quantité, saison, pays)
+    public double calculatePrice(Product product, String customerType) {
+        double basePrice = product.getPrice();
+       
+        // Amélioration : déplacer cette logique dans une stratégie de remise client
+        if ("PREMIUM".equals(customerType)) {
+            basePrice *= 0.8;
+        } else if ("REGULAR".equals(customerType)) {
+            basePrice *= 0.95;
+        } else if ("VIP".equals(customerType)) {
+            basePrice *= 0.7;
+        }
+       
+        // Amélioration : déplacer cette logique dans une stratégie de remise quantité
+        if (product.getQuantity() > 10) {
+            basePrice *= 0.9;
+        } else if (product.getQuantity() > 5) {
+            basePrice *= 0.95;
+        }
+       
+        // Amélioration : externaliser la logique des événements spéciaux (BlackFriday, Noël...)
+        if (isBlackFriday()) {
+            basePrice *= 0.5;
+        } else if (isChristmas()) {
+            basePrice *= 0.8;
+        } else if (isSummerSale()) {
+            basePrice *= 0.85;
+        }
+       
+        // Amélioration : isoler la logique de remise par pays dans une autre classe
+        if ("FR".equals(product.getCountry())) {
+            basePrice *= 0.9;
+        } else if ("DE".equals(product.getCountry())) {
+            basePrice *= 0.95;
+        }
+       
+        return basePrice;
+    }
+   
+    private boolean isBlackFriday() {
+        return false;
+    }
+   
+    private boolean isChristmas() {
+        return false;
+    }
+   
+    private boolean isSummerSale() {
+        return false;
+    }
+}
+
+public class OrderService {
+    private PriceCalculator priceCalculator = new PriceCalculator();
+   
+    // Problème : dépendance concrète créée directement
+    // Amélioration : injecter via le constructeur (inversion de dépendance)
+    // constructor(priceCalculator)
+   
+    // Problème : cette méthode gère à la fois le calcul, la mise à jour du produit et la création de commande
+    // Amélioration : séparer en plusieurs responsabilités (use case, stratégie de prix, entité Order)
+    public Order createOrder(List<Product> products, String customerType) {
+        Order order = new Order();
+       
+        for (Product product : products) {
+            double finalPrice = priceCalculator.calculatePrice(product, customerType);
+            product.setFinalPrice(finalPrice);
+        }
+       
+        order.setProducts(products);
+        return order;
+    }
+}
+
+// Problèmes identifiés :
+// 1. PriceCalculator a trop de responsabilités (client, quantité, saison, pays)
+// 2. OrderService dépend directement d'une classe concrète
+// 3. Pas de séparation claire entre logique métier et application
+// 4. Aucune interface ni injection de dépendance
+
+// Exemple en pseudo code - Interfaces (découpage clean)
+interface IPricingStrategy {
+    calculatePrice(product, customerType)
+}
+
+// Exemple en pseudo code - Stratégies concrètes
+class CustomerDiscountStrategy implements IPricingStrategy {
+    calculatePrice(product, customerType) {
+        si customerType == "PREMIUM" → prix * 0.8
+        si customerType == "REGULAR" → prix * 0.95
+        si customerType == "VIP" → prix * 0.7
+    }
+}
+
+class QuantityDiscountStrategy implements IPricingStrategy {
+    calculatePrice(product) {
+        si quantité > 10 → prix * 0.9
+        si quantité > 5 → prix * 0.95
+    }
+}
+
+// Exemple en pseudo code - Use Case simplifié
+class CalculateProductPriceUseCase {
+    constructor(strategies) {
+        this.strategies = strategies
+    }
+    
+    execute(product, customerType) {
+        prix = product.price
+        pour chaque stratégie dans strategies {
+            prix = stratégie.calculatePrice(product, customerType)
+        }
+        return prix
+    }
+}
+
+// Exemple en pseudo code - Service de commande amélioré
+class CreateOrderUseCase {
+    constructor(calculatePriceUseCase) {
+        this.calculatePriceUseCase = calculatePriceUseCase
+    }
+    
+    execute(products, customerType) {
+        créer une nouvelle commande
+        pour chaque produit {
+            prixFinal = calculatePriceUseCase.execute(product, customerType)
+            product.setFinalPrice(prixFinal)
+        }
+        return order
+    }
+}
