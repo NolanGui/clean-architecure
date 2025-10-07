@@ -1,0 +1,159 @@
+// Code à analyser
+public class EcommerceService {
+    private DatabaseConnection db;
+    private EmailService emailService;
+    private PaymentGateway paymentGateway;
+    private InventoryService inventoryService;
+    private NotificationService notificationService;
+   
+    // Problème: création directe des dépendances, difficile à tester
+    // Amélioration: injecter via le constructeur
+    // constructor(db, emailService, paymentGateway, inventoryService, notificationService)
+    public EcommerceService() {
+        this.db = new DatabaseConnection();
+        this.emailService = new EmailService();
+        this.paymentGateway = new PaymentGateway();
+        this.inventoryService = new InventoryService();
+        this.notificationService = new NotificationService();
+    }
+   
+    // Problème: cette méthode fait trop de choses
+    public Order processOrder(String customerId, List<Product> products,
+                             String paymentMethod, String shippingAddress) {
+       
+        // Amélioration: extraire dans un validateur
+        // orderValidator.validate(customerId, products)
+        if (customerId == null || products.isEmpty()) {
+            throw new IllegalArgumentException("Données invalides");
+        }
+       
+        for (Product product : products) {
+            if (!inventoryService.isAvailable(product.getId(), product.getQuantity())) {
+                throw new RuntimeException("Produit indisponible: " + product.getName());
+            }
+        }
+       
+        // Amélioration: mettre ce calcul dans l'entité Order
+        // totalPrice = order.calculateTotal()
+        double totalPrice = 0;
+        for (Product product : products) {
+            totalPrice += product.getPrice() * product.getQuantity();
+        }
+       
+        // Problème: règle codée en dur
+        // Amélioration: utiliser des variables
+        // finalPrice = pricingStrategy.applyDiscount(totalPrice)
+        if (totalPrice > 100) {
+            totalPrice *= 0.9;
+        }
+       
+        Order order = new Order();
+        order.setId(UUID.randomUUID().toString());
+        order.setCustomerId(customerId);
+        order.setProducts(products);
+        order.setTotalPrice(totalPrice);
+        order.setStatus("PENDING");
+        order.setCreatedAt(new Date());
+       
+        // Amélioration: utiliser un repository
+        // orderRepository.save(order)
+        db.saveOrder(order);
+       
+        PaymentResult paymentResult = paymentGateway.processPayment(
+            totalPrice, paymentMethod, customerId);
+       
+        if (!paymentResult.isSuccess()) {
+            // Amélioration: mettre cette logique dans l'entité
+            // order.markAsPaymentFailed()
+            order.setStatus("PAYMENT_FAILED");
+            db.updateOrder(order);
+            throw new RuntimeException("Paiement échoué: " + paymentResult.getErrorMessage());
+        }
+       
+        for (Product product : products) {
+            inventoryService.reduceStock(product.getId(), product.getQuantity());
+        }
+       
+        emailService.sendOrderConfirmation(customerId, order);
+       
+        notificationService.notifyOrderCreated(order);
+       
+        // Amélioration: mettre cette logique dans l'entité
+        // order.confirm()
+        order.setStatus("CONFIRMED");
+        db.updateOrder(order);
+       
+        return order;
+    }
+   
+    public void cancelOrder(String orderId) {
+        // Implementation
+    }
+   
+    public void refundOrder(String orderId) {
+        // Implementation
+    }
+   
+    public List<Order> getCustomerOrders(String customerId) {
+        // Implementation
+        return null;
+    }
+}
+
+// Problèmes identifiés:
+// 1. Trop de responsabilités dans une seule classe
+// 2. Dépendances concrètes créées directement
+// 3. Logique métier mélangée avec infrastructure
+// 4. Règles de pricing codées en dur
+
+// Exemple en pseudo code - Interfaces pour les dépendances
+    interface IOrderRepository {
+        save(order)
+        update(order)
+    }
+
+    interface IPricingStrategy {
+        applyDiscount(totalPrice)
+    }
+
+// Exemple en pseudo code - Entité Order améliorée
+class Order {
+    calculateTotal() {
+        total = 0
+        pour chaque product {
+            total += product.price * product.quantity
+        }
+        return total
+    }
+    
+    confirm() {
+        if status != "PENDING" throw error
+        status = "CONFIRMED"
+    }
+    
+    markAsPaymentFailed() {
+        status = "PAYMENT_FAILED"
+    }
+}
+
+// Exemple en pseudo code - Service amélioré
+class ProcessOrderUseCase {
+    constructor(orderRepository, paymentService, inventoryService, pricingStrategy) {
+        this.orderRepository = orderRepository
+        this.paymentService = paymentService
+        this.inventoryService = inventoryService
+        this.pricingStrategy = pricingStrategy
+    }
+    
+    execute(customerId, products, paymentMethod) {
+        valider les données
+        vérifier le stock
+        créer la commande
+        appliquer la remise avec pricingStrategy
+        sauvegarder avec orderRepository
+        traiter le paiement
+        réduire le stock
+        confirmer la commande avec order.confirm()
+        return order
+    }
+}
